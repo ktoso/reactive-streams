@@ -1,6 +1,7 @@
 package org.reactivestreams.example.unicast;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.reactivestreams.Subscription;
 import org.reactivestreams.Subscriber;
@@ -15,7 +16,7 @@ class InfiniteIncrementNumberPublisher implements Publisher<Integer> {
 
         Subscription subscription = new Subscription() {
 
-            AtomicInteger capacity = new AtomicInteger();
+            final AtomicLong capacity = new AtomicLong();
 
             @Override
             public void request(long n) {
