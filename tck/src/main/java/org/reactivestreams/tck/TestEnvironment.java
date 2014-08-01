@@ -228,7 +228,7 @@ public class TestEnvironment {
     }
 
     public T requestNextElement(long timeoutMillis, String errorMsg) throws InterruptedException {
-        request(1);
+      request(1);
       return nextElement(timeoutMillis, errorMsg);
     }
 
@@ -241,7 +241,7 @@ public class TestEnvironment {
     }
 
     public Optional<T> requestNextElementOrEndOfStream(long timeoutMillis, String errorMsg) throws InterruptedException {
-        request(1);
+      request(1);
       return nextElementOrEndOfStream(timeoutMillis, errorMsg);
     }
 
@@ -262,17 +262,17 @@ public class TestEnvironment {
       expectCompletion(timeoutMillis, errorMsg);
     }
 
-    public List<T> requestNextElements(int elements) throws InterruptedException {
+    public List<T> requestNextElements(long elements) throws InterruptedException {
       request(elements);
       return nextElements(elements, env.defaultTimeoutMillis());
     }
 
-    public List<T> requestNextElements(int elements, long timeoutMillis) throws InterruptedException {
+    public List<T> requestNextElements(long elements, long timeoutMillis) throws InterruptedException {
       request(elements);
       return nextElements(elements, timeoutMillis, String.format("Did not receive %d expected elements", elements));
     }
 
-    public List<T> requestNextElements(int elements, long timeoutMillis, String errorMsg) throws InterruptedException {
+    public List<T> requestNextElements(long elements, long timeoutMillis, String errorMsg) throws InterruptedException {
       request(elements);
       return nextElements(elements, timeoutMillis, errorMsg);
     }
@@ -305,19 +305,19 @@ public class TestEnvironment {
       return received.nextOrEndOfStream(timeoutMillis, errorMsg);
     }
 
-    public List<T> nextElements(int elements) throws InterruptedException {
+    public List<T> nextElements(long elements) throws InterruptedException {
       return nextElements(elements, env.defaultTimeoutMillis(), "Did not receive expected element or completion");
     }
 
-    public List<T> nextElements(int elements, String errorMsg) throws InterruptedException {
+    public List<T> nextElements(long elements, String errorMsg) throws InterruptedException {
       return nextElements(elements, env.defaultTimeoutMillis(), errorMsg);
     }
 
-    public List<T> nextElements(int elements, long timeoutMillis) throws InterruptedException {
+    public List<T> nextElements(long elements, long timeoutMillis) throws InterruptedException {
       return nextElements(elements, timeoutMillis, "Did not receive expected element or completion");
     }
 
-    public List<T> nextElements(int elements, long timeoutMillis, String errorMsg) throws InterruptedException {
+    public List<T> nextElements(long elements, long timeoutMillis, String errorMsg) throws InterruptedException {
       return received.nextN(elements, timeoutMillis, errorMsg);
     }
 
@@ -551,7 +551,7 @@ public class TestEnvironment {
 
     public void assertCompleted(String errorMsg) {
       if(!isCompleted())
-          env.flop(errorMsg);
+        env.flop(errorMsg);
     }
 
     public void assertUncompleted(String errorMsg) {
@@ -615,9 +615,9 @@ public class TestEnvironment {
       return value;
     }
 
-    public List<T> nextN(int elements, long timeoutMillis, String errorMsg) throws InterruptedException {
+    public List<T> nextN(long elements, long timeoutMillis, String errorMsg) throws InterruptedException {
       List<T> result = new LinkedList<T>();
-      int remaining = elements;
+      long remaining = elements;
       while (remaining > 0) {
         result.add(next(timeoutMillis, errorMsg)); // TODO: fix error messages showing wrong timeout info
         remaining--;

@@ -4,8 +4,6 @@ import org.reactivestreams.Processor;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
-import org.reactivestreams.tck.Annotations.NotVerified;
-import org.reactivestreams.tck.Annotations.Required;
 import org.reactivestreams.tck.TestEnvironment.ManualPublisher;
 import org.reactivestreams.tck.TestEnvironment.ManualSubscriber;
 import org.reactivestreams.tck.TestEnvironment.ManualSubscriberWithSubscriptionSupport;
@@ -30,21 +28,25 @@ public abstract class IdentityProcessorVerification<T> {
 
   ////////////////// END OF DELEGATED TO SPECS //////////////////
 
-
-  private final int testBufferSize;
+  //
+  private final int processorBufferSize;
 
   /**
    * Test class must specify the expected time it takes for the publisher to
-   * shut itself down when the the last downstream Subscription is cancelled.
-   * Used by `publisherSubscribeWhenInShutDownStateMustTriggerOnErrorAndNotOnSubscribe`.
+   * shut itself down when the the last downstream {@code Subscription} is cancelled.
    */
+  @SuppressWarnings("unused")
   public IdentityProcessorVerification(TestEnvironment env, long publisherShutdownTimeoutMillis) {
     this(env, publisherShutdownTimeoutMillis, TestEnvironment.TEST_BUFFER_SIZE);
   }
 
-  public IdentityProcessorVerification(final TestEnvironment env, long publisherShutdownTimeoutMillis, int testBufferSize) {
+  /**
+   * Test class must specify the expected time it takes for the publisher to
+   * shut itself down when the the last downstream {@code Subscription} is cancelled.
+   */
+  public IdentityProcessorVerification(final TestEnvironment env, long publisherShutdownTimeoutMillis, int processorBufferSize) {
     this.env = env;
-    this.testBufferSize = testBufferSize;
+    this.processorBufferSize = processorBufferSize;
 
     this.subscriberVerification = new SubscriberVerification<T>(env) {
       @Override
@@ -53,14 +55,14 @@ public abstract class IdentityProcessorVerification<T> {
       }
 
       @Override
-      public Publisher<T> createHelperPublisher(int elements) {
+      public Publisher<T> createHelperPublisher(long elements) {
         return IdentityProcessorVerification.this.createHelperPublisher(elements);
       }
     };
 
     publisherVerification = new PublisherVerification<T>(env, publisherShutdownTimeoutMillis) {
       @Override
-      public Publisher<T> createPublisher(int elements) {
+      public Publisher<T> createPublisher(long elements) {
         return IdentityProcessorVerification.this.createPublisher(elements);
       }
 
@@ -73,6 +75,11 @@ public abstract class IdentityProcessorVerification<T> {
       public Publisher<T> createErrorStatePublisher() {
         return IdentityProcessorVerification.this.createErrorStatePublisher();
       }
+
+      @Override
+      public long maxElementsFromPublisher() {
+        return IdentityProcessorVerification.this.maxElementsFromPublisher();
+      }
     };
   }
 
@@ -80,17 +87,19 @@ public abstract class IdentityProcessorVerification<T> {
    * This is the main method you must implement in your test incarnation.
    * It must create a Publisher, which simply forwards all stream elements from its upstream
    * to its downstream. It must be able to internally buffer the given number of elements.
+   *
+   * @param bufferSize number of elements the processor is required to be able to buffer
    */
   public abstract Processor<T, T> createIdentityProcessor(int bufferSize);
 
   /**
    * Helper method required for running the Publisher rules against a Publisher.
    * It must create a Publisher for a stream with exactly the given number of elements.
-   * If `elements` is zero the produced stream must be infinite.
+   * If {@code elements} is {@code Long.MAX_VALUE} the produced stream must be infinite.
    * The stream must not produce the same element twice (in case of an infinite stream this requirement
    * is relaxed to only apply to the elements that are actually requested during all tests).
    */
-  public abstract Publisher<T> createHelperPublisher(int elements);
+  public abstract Publisher<T> createHelperPublisher(long elements);
 
   /**
    * Return a Publisher in {@code completed} state in order to run additional tests on it,
@@ -104,30 +113,43 @@ public abstract class IdentityProcessorVerification<T> {
    */
   public abstract Publisher<T> createErrorStatePublisher();
 
+  /**
+   * Override and return lower value if your Publisher is only able to produce a set number of elements.
+   * For example, if it is designed to return at-most-one element, return {@code 1} from this method.
+   */
+  public long maxElementsFromPublisher() {
+    // general idea is to skip tests that we are unable to run on a given publisher (if it can signal less than we need for a test)
+    // see: https://github.com/reactive-streams/reactive-streams/issues/87 for details
+    return Long.MAX_VALUE;
+  }
+
   ////////////////////// TEST ENV CLEANUP /////////////////////////////////////
 
     @BeforeMethod
     public void setUp() throws Exception {
-      env.clearAsyncErrors();
+      publisherVerification.setUp();
+      subscriberVerification.setUp();
     }
 
   ////////////////////// PUBLISHER RULES VERIFICATION ///////////////////////////
-  // 4.1
-  // A Processor represents a processing stage—which is both a Subscriber and a Publisher
-  // It MUST obey the contracts of both [1]
 
-
-  // A Publisher
-  //   must obey all Publisher rules on its producing side
-  public Publisher<T> createPublisher(int elements) {
-    Processor<T, T> processor = createIdentityProcessor(testBufferSize);
+  // A Processor
+  //   must obey all Publisher rules on its publishing side
+  public Publisher<T> createPublisher(long elements) {
+    Processor<T, T> processor = createIdentityProcessor(processorBufferSize);
     Publisher<T> pub = createHelperPublisher(elements);
     pub.subscribe(processor);
     return processor; // we run the PublisherVerification against this
   }
 
   /////////////////////// DELEGATED TESTS, A PROCESSOR "IS A" PUBLISHER //////////////////////
-  
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#4.1
+
+  @Test
+  public void createPublisher1MustProduceAStreamOfExactly1Element() throws Throwable {
+    publisherVerification.createPublisher1MustProduceAStreamOfExactly1Element();
+  }
+
   @Test
   public void createPublisher3MustProduceAStreamOfExactly3Elements() throws Throwable {
     publisherVerification.createPublisher3MustProduceAStreamOfExactly3Elements();
@@ -144,7 +166,7 @@ public abstract class IdentityProcessorVerification<T> {
   }
 
   @Test
-  public void spec103_mustSignalOnMethodsSequentially() throws Exception {
+  public void spec103_mustSignalOnMethodsSequentially() throws Throwable {
     publisherVerification.spec103_mustSignalOnMethodsSequentially();
   }
 
@@ -213,11 +235,11 @@ public abstract class IdentityProcessorVerification<T> {
     publisherVerification.spec313_cancelMustMakeThePublisherEventuallyDropAllReferencesToTheSubscriber();
   }
 
-  // A Processor
-  //   must call `onError` on all its subscribers if it encounters a non-recoverable error
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#1.4
+  // for multiple subscribers
   @Test
   public void spec104_mustCallOnErrorOnAllItsSubscribersIfItEncountersANonRecoverableError() throws Exception {
-    new TestSetup(env, testBufferSize) {{
+    new TestSetup(env, processorBufferSize) {{
       ManualSubscriberWithErrorCollection<T> sub1 = new ManualSubscriberWithErrorCollection<T>(env);
       env.subscribe(processor, sub1);
       ManualSubscriberWithErrorCollection<T> sub2 = new ManualSubscriberWithErrorCollection<T>(env);
@@ -242,11 +264,12 @@ public abstract class IdentityProcessorVerification<T> {
   }
 
   ////////////////////// SUBSCRIBER RULES VERIFICATION ///////////////////////////
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#4.1
 
   // A Processor
   //   must obey all Subscriber rules on its consuming side
   public Subscriber<T> createSubscriber(final SubscriberVerification.SubscriberProbe<T> probe) {
-    Processor<T, T> processor = createIdentityProcessor(testBufferSize);
+    Processor<T, T> processor = createIdentityProcessor(processorBufferSize);
     processor.subscribe(
         new Subscriber<T>() {
           public void onSubscribe(final Subscription subscription) {
@@ -288,7 +311,7 @@ public abstract class IdentityProcessorVerification<T> {
   //   must cancel its upstream Subscription if its last downstream Subscription has been cancelled
   @Test
   public void mustCancelItsUpstreamSubscriptionIfItsLastDownstreamSubscriptionHasBeenCancelled() throws Exception {
-    new TestSetup(env, testBufferSize) {{
+    new TestSetup(env, processorBufferSize) {{
       ManualSubscriber<T> sub = newSubscriber();
       sub.cancel();
       expectCancelling();
@@ -301,7 +324,7 @@ public abstract class IdentityProcessorVerification<T> {
   //   must immediately pass on `onError` events received from its upstream to its downstream
   @Test
   public void mustImmediatelyPassOnOnErrorEventsReceivedFromItsUpstreamToItsDownstream() throws Exception {
-    new TestSetup(env, testBufferSize) {{
+    new TestSetup(env, processorBufferSize) {{
       ManualSubscriberWithErrorCollection<T> sub = new ManualSubscriberWithErrorCollection<T>(env);
       env.subscribe(processor, sub);
 
@@ -317,12 +340,12 @@ public abstract class IdentityProcessorVerification<T> {
   //   must be prepared to receive incoming elements from its upstream even if a downstream subscriber has not requested anything yet
   @Test
   public void mustBePreparedToReceiveIncomingElementsFromItsUpstreamEvenIfADownstreamSubscriberHasNotRequestedYet() throws Exception {
-    new TestSetup(env, testBufferSize) {{
+    new TestSetup(env, processorBufferSize) {{
         ManualSubscriber<T> sub = newSubscriber();
         final T x = sendNextTFromUpstream();
         sub.expectNone(50);
         final T y = sendNextTFromUpstream();
-        sub.expectNone(50);
+      sub.expectNone(50);
 
         sub.request(2);
         sub.expectNext(x);
@@ -337,6 +360,7 @@ public abstract class IdentityProcessorVerification<T> {
   }
 
   /////////////////////// DELEGATED TESTS, A PROCESSOR "IS A" SUBSCRIBER //////////////////////
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#4.1
 
   @Test
   public void exerciseHappyPath() throws Throwable {
@@ -520,10 +544,11 @@ public abstract class IdentityProcessorVerification<T> {
 
   /////////////////////// ADDITIONAL "COROLLARY" TESTS //////////////////////
 
-  // trigger `requestFromUpstream` for elements that have been requested 'long ago'
+  // A Processor
+  //   must trigger `requestFromUpstream` for elements that have been requested 'long ago'
   @Test
   public void mustRequestFromUpstreamForElementsThatHaveBeenRequestedLongAgo() throws Exception {
-    new TestSetup(env, testBufferSize) {{
+    new TestSetup(env, processorBufferSize) {{
       ManualSubscriber<T> sub1 = newSubscriber();
       sub1.request(20);
 
@@ -566,19 +591,20 @@ public abstract class IdentityProcessorVerification<T> {
     }};
   }
 
-  // unblock the stream if a 'blocking' subscription has been cancelled
+  // A Processor
+  //   must unblock the stream if a 'blocking' subscription has been cancelled
   @Test
   @SuppressWarnings("unchecked")
   public void mustUnblockTheStreamIfABlockingSubscriptionHasBeenCancelled() throws InterruptedException {
-    new TestSetup(env, testBufferSize) {{
+    new TestSetup(env, processorBufferSize) {{
       ManualSubscriber<T> sub1 = newSubscriber();
       ManualSubscriber<T> sub2 = newSubscriber();
 
-      sub1.request(testBufferSize + 1);
+      sub1.request(processorBufferSize + 1);
       long pending = 0;
       int sent = 0;
-      final T[] tees = (T[]) new Object[testBufferSize];
-      while (sent < testBufferSize) {
+      final T[] tees = (T[]) new Object[processorBufferSize];
+      while (sent < processorBufferSize) {
         if (pending == 0) {
           pending = expectRequest();
         }
@@ -588,7 +614,7 @@ public abstract class IdentityProcessorVerification<T> {
         pending -= 1;
       }
 
-      expectNoRequest(); // because we only have buffer size testBufferSize and sub2 hasn't seen the first value yet
+      expectNoRequest(); // because we only have buffer size processorBufferSize and sub2 hasn't seen the first value yet
       sub2.cancel(); // must "unblock"
 
       expectRequest();
@@ -606,16 +632,14 @@ public abstract class IdentityProcessorVerification<T> {
   /////////////////////// TEST INFRASTRUCTURE //////////////////////
 
   public abstract class TestSetup extends ManualPublisher<T> {
-    private ManualSubscriber<T> tees; // gives us access to an infinite stream of T values
+    final private ManualSubscriber<T> tees; // gives us access to an infinite stream of T values
     private Set<T> seenTees = new HashSet<T>();
 
     final Processor<T, T> processor;
-    final int testBufferSize;
 
     public TestSetup(TestEnvironment env, int testBufferSize) throws InterruptedException {
       super(env);
-      this.testBufferSize = testBufferSize;
-      tees = env.newManualSubscriber(createHelperPublisher(0));
+      tees = env.newManualSubscriber(createHelperPublisher(Long.MAX_VALUE));
       processor = createIdentityProcessor(testBufferSize);
       subscribe(processor);
     }
