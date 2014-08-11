@@ -52,7 +52,8 @@ public abstract class SubscriberVerification<T> {
 
   @Required @Test
   public void exerciseHappyPath() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
+      @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.puppet().triggerRequest(1);
         stage.puppet().triggerRequest(1);
@@ -83,7 +84,7 @@ public abstract class SubscriberVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.1
   @Required @Test
   public void spec201_mustSignalDemandViaSubscriptionRequest() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.puppet().triggerRequest(1);
@@ -126,10 +127,12 @@ public abstract class SubscriberVerification<T> {
       // try to subscribe another time, if the subscriber calls `probe.registerOnSubscribe` the test will fail
       sub().onSubscribe(
           new Subscription() {
+            @Override
             public void request(long elements) {
               env.flop(String.format("Subscriber %s illegally called `subscription.request(%s)`", sub(), elements));
             }
 
+            @Override
             public void cancel() {
               env.flop(String.format("Subscriber %s illegally called `subscription.cancel()`", sub()));
             }
@@ -155,7 +158,7 @@ public abstract class SubscriberVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.8
   @Required @Test
   public void spec208_mustBePreparedToReceiveOnNextSignalsAfterHavingCalledSubscriptionCancel() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.puppet().triggerRequest(1);
@@ -170,9 +173,9 @@ public abstract class SubscriberVerification<T> {
   }
 
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.9
-  @Required  @Test
+  @Required @Test
   public void spec209_mustBePreparedToReceiveAnOnCompleteSignalWithPrecedingRequestCall() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.puppet().triggerRequest(1);
@@ -187,7 +190,7 @@ public abstract class SubscriberVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.9
   @Required @Test
   public void spec209_mustBePreparedToReceiveAnOnCompleteSignalWithoutPrecedingRequestCall() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.sendCompletion();
@@ -201,7 +204,7 @@ public abstract class SubscriberVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.10
   @Required @Test
   public void spec210_mustBePreparedToReceiveAnOnErrorSignalWithPrecedingRequestCall() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.puppet().triggerRequest(1);
@@ -219,7 +222,7 @@ public abstract class SubscriberVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.10
   @Required @Test
   public void spec210_mustBePreparedToReceiveAnOnErrorSignalWithoutPrecedingRequestCall() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         Exception ex = new RuntimeException("Test exception");
@@ -239,7 +242,7 @@ public abstract class SubscriberVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.12
   @Required @Test
   public void spec212_mustNotCallOnSubscribeMoreThanOnceBasedOnObjectEquality() throws Throwable {
-    subscriberTestWithoutSetup(new SubscriberTestRun() {
+    subscriberTestWithoutSetup(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.pub = stage.createHelperPublisher(Long.MAX_VALUE);
@@ -271,96 +274,10 @@ public abstract class SubscriberVerification<T> {
     notVerified(); // cannot be meaningfully tested, or can it?
   }
 
-  // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.2
-  @Required @Test
-  public void spec302_mustAllowSynchronousRequestCallsFromOnNextAndOnSubscribe() throws Throwable {
-    subscriberTestWithoutSetup(new SubscriberTestRun() {
-      @Override
-      public void run(TestStage stage) throws InterruptedException {
-        stage.pub = stage.createHelperPublisher(Long.MAX_VALUE);
-        stage.tees = env.newManualSubscriber(stage.pub);
-        stage.probe = stage.createSubscriberProbe();
-
-        stage.subscribe(new ManualSubscriber<T>(env) {
-          public void onSubscribe(Subscription subs) {
-            this.subscription.complete(subs);
-
-            subs.request(1);
-            subs.request(1);
-            subs.request(1);
-          }
-
-          public void onNext(T element) {
-            Subscription subs = this.subscription.value();
-            subs.request(1);
-            subs.request(1);
-            subs.request(1);
-          }
-        });
-
-        env.verifyNoAsyncErrors();
-      }
-    });
-  }
-
-  // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.3
-  @NotVerified @Test
-  public void spec303_mustNotAllowUnboundedRecursion() throws Exception {
-    notVerified(); // cannot be meaningfully tested, or can it?
-    // notice: could be tested if we knew who's responsibility it is to break the loop.
-  }
-
-  // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.4
-  @NotVerified @Test
-  public void spec304_requestShouldNotPerformHeavyComputations() throws Exception {
-    notVerified(); // cannot be meaningfully tested, or can it?
-  }
-
-  // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.5
-  @NotVerified @Test
-  public void spec305_mustNotSynchronouslyPerformHeavyCompuatation() throws Exception {
-    notVerified(); // cannot be meaningfully tested, or can it?
-  }
-
-  // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.6
-  @Required @Test
-  public void spec306_afterSubscriptionIsCancelledRequestMustBeNops() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
-      @Override
-      public void run(TestStage stage) throws Exception {
-        stage.puppet().signalCancel();
-        stage.expectCancelling();
-
-        stage.puppet().triggerRequest(1);
-        stage.puppet().triggerRequest(1);
-        stage.puppet().triggerRequest(1);
-
-        stage.probe.expectNone();
-      }
-    });
-  }
-
-  // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.7
-  @Required @Test
-  public void spec307_afterSubscriptionIsCancelledAdditionalCancelationsMustBeNops() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
-      @Override
-      public void run(TestStage stage) throws Exception {
-        stage.puppet().signalCancel();
-        stage.expectCancelling();
-
-        stage.puppet().signalCancel();
-
-        stage.probe.expectNone();
-        stage.verifyNoAsyncErrors();
-      }
-    });
-  }
-
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.8
   @Required @Test
   public void spec308_requestMustRegisterGivenNumberElementsToBeProduced() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.puppet().triggerRequest(2);
@@ -376,7 +293,7 @@ public abstract class SubscriberVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.9
   @Required @Test
   public void spec309_callingRequestZeroMustThrow() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(final TestStage stage) throws Throwable {
         env.expectThrowingOfWithMessage(IllegalArgumentException.class, "3.9", new Runnable() {
@@ -393,7 +310,7 @@ public abstract class SubscriberVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.9
   @Required @Test
   public void spec309_callingRequestWithNegativeNumberMustThrow() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(final TestStage stage) throws Throwable {
         env.expectThrowingOfWithMessage(IllegalArgumentException.class, "3.9", new Runnable() {
@@ -422,7 +339,7 @@ public abstract class SubscriberVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.12
   @Required @Test
   public void spec312_cancelMustRequestThePublisherToEventuallyStopSignaling() throws Throwable {
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.puppet().signalCancel();
@@ -455,12 +372,12 @@ public abstract class SubscriberVerification<T> {
   public void spec317_mustSupportAPendingElementCountUpToLongMaxValue() throws Throwable {
     // TODO please read into this one, not sure about semantics
 
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.puppet().triggerRequest(Long.MAX_VALUE);
 
-          stage.probe.expectNext(stage.signalNext());
+        stage.probe.expectNext(stage.signalNext());
 
         // to avoid error messages during test harness shutdown
         stage.sendCompletion();
@@ -476,7 +393,7 @@ public abstract class SubscriberVerification<T> {
   public void spec317_mustSignalOnErrorWhenPendingAboveLongMaxValue() throws Throwable {
     // TODO please read into this one, not sure about semantics
 
-    subscriberTest(new SubscriberTestRun() {
+    subscriberTest(new TestStageTestRun() {
       @Override
       public void run(TestStage stage) throws InterruptedException {
         stage.puppet().triggerRequest(Long.MAX_VALUE - 1);
@@ -493,16 +410,16 @@ public abstract class SubscriberVerification<T> {
 
   /////////////////////// TEST INFRASTRUCTURE /////////////////////////////////
 
-  abstract class SubscriberTestRun {
+  abstract class TestStageTestRun {
     public abstract void run(TestStage stage) throws Throwable;
   }
 
-  public void subscriberTest(SubscriberTestRun body) throws Throwable {
+  public void subscriberTest(TestStageTestRun body) throws Throwable {
     TestStage stage = new TestStage(env, true);
     body.run(stage);
   }
 
-  public void subscriberTestWithoutSetup(SubscriberTestRun body) throws Throwable {
+  public void subscriberTestWithoutSetup(TestStageTestRun body) throws Throwable {
     TestStage stage = new TestStage(env, false);
     body.run(stage);
   }
@@ -563,7 +480,6 @@ public abstract class SubscriberVerification<T> {
     public class Probe implements SubscriberProbe<T> {
       Promise<SubscriberPuppet> puppet = new Promise<SubscriberPuppet>(env);
       Receptacle<T> elements = new Receptacle<T>(env);
-      Latch completed = new Latch(env);
       Promise<Throwable> error = new Promise<Throwable>(env);
 
       @Override
@@ -582,7 +498,7 @@ public abstract class SubscriberVerification<T> {
 
       @Override
       public void registerOnComplete() {
-        completed.close();
+        elements.complete();
       }
 
       @Override
@@ -610,7 +526,7 @@ public abstract class SubscriberVerification<T> {
       }
 
       public void expectCompletion(long timeoutMillis, String msg) throws InterruptedException {
-        completed.expectClose(timeoutMillis, msg);
+        elements.expectCompletion(timeoutMillis, msg);
       }
 
       public <E extends Throwable> void expectErrorWithMessage(Class<E> expected, String requiredMessagePart) throws InterruptedException {
@@ -619,6 +535,7 @@ public abstract class SubscriberVerification<T> {
         assertTrue(message.contains(requiredMessagePart),
                    String.format("Got expected exception %s but missing message [%s], was: %s", err, expected, requiredMessagePart));
       }
+
       public <E extends Throwable> E expectError(Class<E> expected) throws InterruptedException {
         return expectError(expected, env.defaultTimeoutMillis());
       }
@@ -654,9 +571,6 @@ public abstract class SubscriberVerification<T> {
         elements.expectNone(withinMillis, "Expected nothing");
       }
 
-      public void verifyNoAsyncErrors() {
-        env.verifyNoAsyncErrors();
-      }
     }
   }
 
@@ -684,8 +598,6 @@ public abstract class SubscriberVerification<T> {
   }
 
   public interface SubscriberPuppet {
-    void triggerShutdown();
-
     void triggerRequest(long elements);
 
     void signalCancel();

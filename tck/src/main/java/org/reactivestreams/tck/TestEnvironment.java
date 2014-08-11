@@ -1,5 +1,6 @@
 package org.reactivestreams.tck;
 
+import static org.reactivestreams.tck.support.NonFatal.isNonFatal;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
@@ -10,6 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.omg.PortableInterceptor.SYSTEM_EXCEPTION;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
@@ -35,7 +37,9 @@ public class TestEnvironment {
   }
 
   // keeping method around
-  public long defaultTimeoutMillis() { return defaultTimeoutMillis; }
+  public long defaultTimeoutMillis() {
+    return defaultTimeoutMillis;
+  }
 
   // don't use the name `fail` as it would collide with other `fail` definitions like the one in scalatest's traits
   public void flop(String msg) {
@@ -66,7 +70,7 @@ public class TestEnvironment {
       if (clazz.isInstance(e)) {
         // ok
         return e;
-      } else if (org.reactivestreams.tck.support.NonFatal.apply(e)) {
+      } else if (isNonFatal(e)) {
         flop(errorMsg + " but " + e);
       } else {
         throw e;
@@ -89,10 +93,10 @@ public class TestEnvironment {
   }
 
   public <T> void subscribe(Publisher<T> pub, TestSubscriber<T> sub, long timeoutMillis) throws InterruptedException {
-      pub.subscribe(sub);
-      sub.subscription.expectCompletion(timeoutMillis, String.format("Could not subscribe %s to Publisher %s", sub, pub));
-      verifyNoAsyncErrors();
-    }
+    pub.subscribe(sub);
+    sub.subscription.expectCompletion(timeoutMillis, String.format("Could not subscribe %s to Publisher %s", sub, pub));
+    verifyNoAsyncErrors();
+  }
 
 
   public <T> ManualSubscriber<T> newManualSubscriber(Publisher<T> pub) throws InterruptedException {
@@ -111,88 +115,15 @@ public class TestEnvironment {
 
   public void verifyNoAsyncErrors() {
     for (Throwable e : asyncErrors) {
-      if (e instanceof AssertionError) throw (AssertionError) e;
-      else fail("Async error during test execution: " + e);
+      if (e instanceof AssertionError) {
+        throw (AssertionError) e;
+      } else {
+        fail("Async error during test execution: " + e);
+      }
     }
   }
 
   // ---- classes ----
-
-  public static class ManualSubscriberWithSubscriptionSupport<T> extends ManualSubscriber<T> {
-
-    public ManualSubscriberWithSubscriptionSupport(TestEnvironment env) {
-      super(env);
-    }
-
-    public void onNext(T element) {
-      if (subscription.isCompleted()) {
-        super.onNext(element);
-      } else {
-        env.flop("Subscriber::onNext(" + element + ") called before Subscriber::onSubscribe");
-      }
-    }
-
-    public void onComplete() {
-      if (subscription.isCompleted()) {
-        super.onComplete();
-      } else {
-        env.flop("Subscriber::onComplete() called before Subscriber::onSubscribe");
-      }
-    }
-
-    public void onSubscribe(Subscription s) {
-      if (!subscription.isCompleted()) {
-        subscription.complete(s);
-      } else {
-        env.flop("Subscriber::onSubscribe called on an already-subscribed Subscriber");
-      }
-    }
-
-    public void onError(Throwable cause) {
-      if (subscription.isCompleted()) {
-        super.onError(cause);
-      } else {
-        env.flop(cause, "Subscriber::onError(" + cause + ") called before Subscriber::onSubscribe");
-      }
-    }
-  }
-
-  public static class TestSubscriber<T> implements Subscriber<T> {
-    volatile Promise<Subscription> subscription;
-
-    protected final TestEnvironment env;
-
-    public TestSubscriber(TestEnvironment env) {
-      this.env = env;
-      subscription = new Promise<Subscription>(env);
-    }
-
-    @Override
-    public void onError(Throwable cause)  {
-      env.flop(cause, String.format("Unexpected Subscriber::onError(%s)", cause));
-    }
-
-    @Override
-    public void onComplete() {
-      env.flop("Unexpected Subscriber::onComplete()");
-    }
-
-    @Override
-    public void onNext(T element) {
-      env.flop(String.format("Unexpected Subscriber::onNext(%s)", element));
-    }
-
-    public void onSubscribe(Subscription subscription) {
-      env.flop(String.format("Unexpected Subscriber::onSubscribe(%s)", subscription));
-    }
-
-    public void cancel() {
-      if (subscription.isCompleted()) {
-        subscription.value().cancel();
-        subscription = new Promise<Subscription>(env);
-      } else env.flop("Cannot cancel a subscription before having received it");
-    }
-  }
 
   public static class ManualSubscriber<T> extends TestSubscriber<T> {
     Receptacle<T> received = new Receptacle<T>(env);
@@ -372,21 +303,111 @@ public class TestEnvironment {
     }
 
     public void expectNone(String errMsgPrefix) throws InterruptedException {
-      received.expectNone(env.defaultTimeoutMillis(), errMsgPrefix);
+      expectNone(env.defaultTimeoutMillis(), errMsgPrefix);
     }
 
     public void expectNone(long withinMillis) throws InterruptedException {
-      received.expectNone(withinMillis, "Did not expect an element but got ");
+      expectNone(withinMillis, "Did not expect an element but got ");
     }
 
+    public void expectNone(long withinMillis, String errMsgPrefix) throws InterruptedException {
+      received.expectNone(withinMillis, errMsgPrefix);
+    }
+
+  }
+
+  public static class ManualSubscriberWithSubscriptionSupport<T> extends ManualSubscriber<T> {
+
+    public ManualSubscriberWithSubscriptionSupport(TestEnvironment env) {
+      super(env);
+    }
+
+    @Override
+    public void onNext(T element) {
+      if (subscription.isCompleted()) {
+        super.onNext(element);
+      } else {
+        env.flop("Subscriber::onNext(" + element + ") called before Subscriber::onSubscribe");
+      }
+    }
+
+    @Override
+    public void onComplete() {
+      if (subscription.isCompleted()) {
+        super.onComplete();
+      } else {
+        env.flop("Subscriber::onComplete() called before Subscriber::onSubscribe");
+      }
+    }
+
+    @Override
+    public void onSubscribe(Subscription s) {
+      if (!subscription.isCompleted()) {
+        subscription.complete(s);
+      } else {
+        env.flop("Subscriber::onSubscribe called on an already-subscribed Subscriber");
+      }
+    }
+
+    @Override
+    public void onError(Throwable cause) {
+      if (subscription.isCompleted()) {
+        super.onError(cause);
+      } else {
+        env.flop(cause, "Subscriber::onError(" + cause + ") called before Subscriber::onSubscribe");
+      }
+    }
+  }
+
+  public static class TestSubscriber<T> implements Subscriber<T> {
+    volatile Promise<Subscription> subscription;
+
+    protected final TestEnvironment env;
+
+    public TestSubscriber(TestEnvironment env) {
+      this.env = env;
+      subscription = new Promise<Subscription>(env);
+    }
+
+    @Override
+    public void onError(Throwable cause) {
+      env.flop(cause, String.format("Unexpected Subscriber::onError(%s)", cause));
+    }
+
+    @Override
+    public void onComplete() {
+      env.flop("Unexpected Subscriber::onComplete()");
+    }
+
+    @Override
+    public void onNext(T element) {
+      env.flop(String.format("Unexpected Subscriber::onNext(%s)", element));
+    }
+
+    @Override
+    public void onSubscribe(Subscription subscription) {
+      env.flop(String.format("Unexpected Subscriber::onSubscribe(%s)", subscription));
+    }
+
+    public void cancel() {
+      if (subscription.isCompleted()) {
+        subscription.value().cancel();
+        subscription = new Promise<Subscription>(env);
+      } else {
+        env.flop("Cannot cancel a subscription before having received it");
+      }
+    }
   }
 
   public static class ManualPublisher<T> implements Publisher<T> {
     protected final TestEnvironment env;
 
-    Optional<Subscriber<T>> subscriber = Optional.empty();
-    Receptacle<Long> requests;
-    Latch cancelled;
+    protected long pendingDemand = 0L;
+    protected Optional<Subscriber<T>> subscriber = Optional.empty();
+
+    protected final Receptacle<Long> requests;
+
+    protected final Latch cancelled;
 
     public ManualPublisher(TestEnvironment env) {
       this.env = env;
@@ -418,26 +439,27 @@ public class TestEnvironment {
     }
 
     public void sendNext(T element) {
-      if (subscriber.isDefined()) subscriber.get().onNext(element);
-      else env.flop("Cannot sendNext before subscriber subscription");
+      if (subscriber.isDefined()) {
+        subscriber.get().onNext(element);
+      } else {
+        env.flop("Cannot sendNext before having a Subscriber");
+      }
     }
 
     public void sendCompletion() {
-      if (subscriber.isDefined()) subscriber.get().onComplete();
-      else env.flop("Cannot sendCompletion before subscriber subscription");
+      if (subscriber.isDefined()) {
+        subscriber.get().onComplete();
+      } else {
+        env.flop("Cannot sendCompletion before having a Subscriber");
+      }
     }
 
     public void sendError(Throwable cause) {
-      if (subscriber.isDefined()) subscriber.get().onError(cause);
-      else env.flop("Cannot sendError before subscriber subscription");
-    }
-
-    public long nextRequest() throws InterruptedException {
-      return nextRequest(env.defaultTimeoutMillis());
-    }
-
-    public long nextRequest(long timeoutMillis) throws InterruptedException {
-      return requests.next(timeoutMillis, "Did not receive expected `request` call");
+      if (subscriber.isDefined()) {
+        subscriber.get().onError(cause);
+      } else {
+        env.flop("Cannot sendError before having a Subscriber");
+      }
     }
 
     public long expectRequest() throws InterruptedException {
@@ -445,12 +467,14 @@ public class TestEnvironment {
     }
 
     public long expectRequest(long timeoutMillis) throws InterruptedException {
-      long requested = nextRequest(timeoutMillis);
+      long requested = requests.next(timeoutMillis, "Did not receive expected `request` call");
       if (requested <= 0) {
         env.flop(String.format("Requests cannot be zero or negative but received request(%s)", requested));
         return 0; // keep compiler happy
-      } else
+      } else {
+        pendingDemand += requested;
         return requested;
+      }
     }
 
     public void expectExactRequest(long expected) throws InterruptedException {
@@ -459,8 +483,10 @@ public class TestEnvironment {
 
     public void expectExactRequest(long expected, long timeoutMillis) throws InterruptedException {
       long requested = expectRequest(timeoutMillis);
-      if (requested != expected)
+      if (requested != expected) {
         env.flop(String.format("Received `request(%d)` on upstream but expected `request(%d)`", requested, expected));
+      }
+      pendingDemand += requested;
     }
 
     public void expectNoRequest() throws InterruptedException {
@@ -480,7 +506,9 @@ public class TestEnvironment {
     }
   }
 
-  /** like a CountDownLatch, but resettable and with some convenience methods */
+  /**
+   * Like a CountDownLatch, but resettable and with some convenience methods
+   */
   public static class Latch {
     private final TestEnvironment env;
     volatile private CountDownLatch countDownLatch = new CountDownLatch(1);
@@ -549,16 +577,6 @@ public class TestEnvironment {
       abq.add(value);
     }
 
-    public void assertCompleted(String errorMsg) {
-      if(!isCompleted())
-        env.flop(errorMsg);
-    }
-
-    public void assertUncompleted(String errorMsg) {
-    if(isCompleted())
-      env.flop(errorMsg);
-    }
-
     public void expectCompletion(long timeoutMillis, String errorMsg) throws InterruptedException {
       if (!isCompleted()) {
         T val = abq.poll(timeoutMillis, TimeUnit.MILLISECONDS);
@@ -572,22 +590,30 @@ public class TestEnvironment {
     }
   }
 
-   // a "Promise" for multiple values, which also supports "end-of-stream reached"
+  // a "Promise" for multiple values, which also supports "end-of-stream reached"
   public static class Receptacle<T> {
     final int QUEUE_SIZE = 2 * TEST_BUFFER_SIZE;
-     private final TestEnvironment env;
+    private final TestEnvironment env;
 
-     private ArrayBlockingQueue<Optional<T>> abq = new ArrayBlockingQueue<Optional<T>>(QUEUE_SIZE);
+    private final ArrayBlockingQueue<Optional<T>> abq = new ArrayBlockingQueue<Optional<T>>(QUEUE_SIZE);
 
-     Receptacle(TestEnvironment env) {
-       this.env = env;
-     }
+    private final Latch completedLatch;
 
-     public void add(T value) {
+    Receptacle(TestEnvironment env) {
+      this.env = env;
+      this.completedLatch = new Latch(env);
+    }
+
+    public void add(T value) {
+      completedLatch.assertOpen(String.format("Unexpected element %s received after stream completed", value));
+
       abq.add(Optional.of(value));
     }
 
     public void complete() {
+      completedLatch.assertOpen("Unexpected additional complete signal received!");
+      completedLatch.close();
+
       abq.add(Optional.<T>empty());
     }
 
@@ -615,11 +641,17 @@ public class TestEnvironment {
       return value;
     }
 
+    /**
+     * @param timeoutMillis total timeout time for awaiting all {@code elements} number of elements
+     */
     public List<T> nextN(long elements, long timeoutMillis, String errorMsg) throws InterruptedException {
       List<T> result = new LinkedList<T>();
       long remaining = elements;
+      long deadline = System.currentTimeMillis() + timeoutMillis;
       while (remaining > 0) {
-        result.add(next(timeoutMillis, errorMsg)); // TODO: fix error messages showing wrong timeout info
+        long remainingMillis = deadline - System.currentTimeMillis();
+
+        result.add(next(remainingMillis, errorMsg));
         remaining--;
       }
 
@@ -637,40 +669,37 @@ public class TestEnvironment {
       } // else, ok
     }
 
-     public <E extends Throwable> E expectError(Class<E> clazz, long timeoutMillis, String errorMsg) throws Exception {
-       Thread.sleep(timeoutMillis);
+    @SuppressWarnings("unchecked")
+    public <E extends Throwable> E expectError(Class<E> clazz, long timeoutMillis, String errorMsg) throws Exception {
+      Thread.sleep(timeoutMillis);
 
-       if (env.asyncErrors.isEmpty()) {
-         env.flop(String.format("%s within %d ms", errorMsg, timeoutMillis));
-       } else {
-         // ok, there was an expected error
-         Throwable thrown = env.asyncErrors.remove(0);
+      if (env.asyncErrors.isEmpty()) {
+        env.flop(String.format("%s within %d ms", errorMsg, timeoutMillis));
+      } else {
+        // ok, there was an expected error
+        Throwable thrown = env.asyncErrors.remove(0);
 
-         if (thrown != null && clazz.isInstance(thrown)) {
-           return (E) thrown;
-         } else if (thrown != null) {
-           env.flop(String.format("%s within %d ms; Got %s but expected %s",
-                                  errorMsg, timeoutMillis, thrown.getClass().getCanonicalName(), clazz.getCanonicalName()));
-         } else {
-           env.flop(String.format("%s within %d ms; Got `null` but expected %s",
-                                  errorMsg, timeoutMillis, clazz.getCanonicalName()));
-         }
-       }
+        if (clazz.isInstance(thrown)) {
+          return (E) thrown;
+        } else {
+          env.flop(String.format("%s within %d ms; Got %s but expected %s",
+                                 errorMsg, timeoutMillis, thrown.getClass().getCanonicalName(), clazz.getCanonicalName()));
+        }
+      }
+      // make compiler happy
+      return null;
+    }
 
-       // make compiler happy
-       return null;
-     }
+    public void expectError(long timeoutMillis, String errorMsg) throws Exception {
+      Thread.sleep(timeoutMillis);
 
-     public void expectError(long timeoutMillis, String errorMsg) throws Exception {
-       Thread.sleep(timeoutMillis);
-
-       if (env.asyncErrors.isEmpty()) {
-         env.flop(String.format("%s within %d ms", errorMsg, timeoutMillis));
-       } else {
-         // ok, there was an expected error
-         env.asyncErrors.remove(0);
-       }
-     }
+      if (env.asyncErrors.isEmpty()) {
+        env.flop(String.format("%s within %d ms", errorMsg, timeoutMillis));
+      } else {
+        // ok, there was an expected error
+        env.asyncErrors.remove(0);
+      }
+    }
 
     void expectNone(long withinMillis, String errorMsgPrefix) throws InterruptedException {
       Thread.sleep(withinMillis);

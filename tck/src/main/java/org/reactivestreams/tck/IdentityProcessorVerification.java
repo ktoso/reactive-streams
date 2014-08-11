@@ -28,21 +28,29 @@ public abstract class IdentityProcessorVerification<T> {
 
   ////////////////// END OF DELEGATED TO SPECS //////////////////
 
-  //
+  // number of elements the processor under test must be able ot buffer,
+  // without dropping elements. Defaults to `TestEnvironment.TEST_BUFFER_SIZE`.
   private final int processorBufferSize;
 
   /**
    * Test class must specify the expected time it takes for the publisher to
    * shut itself down when the the last downstream {@code Subscription} is cancelled.
+   *
+   * The processor will be required to be able to buffer {@code TestEnvironment.TEST_BUFFER_SIZE} elements.
+   *
+   * @param publisherShutdownTimeoutMillis expected time which a processor requires to shut itself down
    */
   @SuppressWarnings("unused")
-  public IdentityProcessorVerification(TestEnvironment env, long publisherShutdownTimeoutMillis) {
+  public IdentityProcessorVerification(final TestEnvironment env, long publisherShutdownTimeoutMillis) {
     this(env, publisherShutdownTimeoutMillis, TestEnvironment.TEST_BUFFER_SIZE);
   }
 
   /**
    * Test class must specify the expected time it takes for the publisher to
    * shut itself down when the the last downstream {@code Subscription} is cancelled.
+   *
+   * @param publisherShutdownTimeoutMillis expected time which a processor requires to shut itself down
+   * @param processorBufferSize            number of elements the processor is required to be able to buffer.
    */
   public IdentityProcessorVerification(final TestEnvironment env, long publisherShutdownTimeoutMillis, int processorBufferSize) {
     this.env = env;
@@ -88,7 +96,7 @@ public abstract class IdentityProcessorVerification<T> {
    * It must create a Publisher, which simply forwards all stream elements from its upstream
    * to its downstream. It must be able to internally buffer the given number of elements.
    *
-   * @param bufferSize number of elements the processor is required to be able to buffer
+   * @param bufferSize number of elements the processor is required to be able to buffer.
    */
   public abstract Processor<T, T> createIdentityProcessor(int bufferSize);
 
@@ -96,48 +104,52 @@ public abstract class IdentityProcessorVerification<T> {
    * Helper method required for running the Publisher rules against a Publisher.
    * It must create a Publisher for a stream with exactly the given number of elements.
    * If {@code elements} is {@code Long.MAX_VALUE} the produced stream must be infinite.
+   *
    * The stream must not produce the same element twice (in case of an infinite stream this requirement
    * is relaxed to only apply to the elements that are actually requested during all tests).
+   *
+   * @param elements exact number of elements this publisher should emit,
+   *                 unless equal to {@code Long.MAX_VALUE} in which case the stream should be effectively infinite
    */
   public abstract Publisher<T> createHelperPublisher(long elements);
 
   /**
-   * Return a Publisher in {@code completed} state in order to run additional tests on it,
+   * Return a Publisher that immediately signals {@code onComplete} to incoming subscriptions,
    * or {@code null} in order to skip them.
    */
-  public abstract Publisher<T> createCompletedStatePublisher();
+  public abstract Publisher<T> createCompletedStatePublisher(); // TODO is currently not used, remove?
 
   /**
-   * Return a Publisher in {@code error} state in order to run additional tests on it,
+   * Return a Publisher that immediately signals {@code onError} to incoming subscriptions,
    * or {@code null} in order to skip them.
    */
   public abstract Publisher<T> createErrorStatePublisher();
 
   /**
-   * Override and return lower value if your Publisher is only able to produce a set number of elements.
+   * Override and return lower value if your Publisher is only able to produce a finite number of elements.
    * For example, if it is designed to return at-most-one element, return {@code 1} from this method.
+   *
+   * Defaults to {@code Long.MAX_VALUE}, meaning that the Publisher can be produce up to infinite streams.
    */
   public long maxElementsFromPublisher() {
-    // general idea is to skip tests that we are unable to run on a given publisher (if it can signal less than we need for a test)
-    // see: https://github.com/reactive-streams/reactive-streams/issues/87 for details
     return Long.MAX_VALUE;
   }
 
   ////////////////////// TEST ENV CLEANUP /////////////////////////////////////
 
-    @BeforeMethod
-    public void setUp() throws Exception {
-      publisherVerification.setUp();
-      subscriberVerification.setUp();
-    }
+  @BeforeMethod
+  public void setUp() throws Exception {
+    publisherVerification.setUp();
+    subscriberVerification.setUp();
+  }
 
   ////////////////////// PUBLISHER RULES VERIFICATION ///////////////////////////
 
   // A Processor
   //   must obey all Publisher rules on its publishing side
   public Publisher<T> createPublisher(long elements) {
-    Processor<T, T> processor = createIdentityProcessor(processorBufferSize);
-    Publisher<T> pub = createHelperPublisher(elements);
+    final Processor<T, T> processor = createIdentityProcessor(processorBufferSize);
+    final Publisher<T> pub = createHelperPublisher(elements);
     pub.subscribe(processor);
     return processor; // we run the PublisherVerification against this
   }
@@ -181,8 +193,8 @@ public abstract class IdentityProcessorVerification<T> {
   }
 
   @Test
-  public void spec106_mustConsiderSubscriptionCancelledAgterOnErrorOrOnCompleteHasBeenCalled() throws Throwable {
-    publisherVerification.spec106_mustConsiderSubscriptionCancelledAgterOnErrorOrOnCompleteHasBeenCalled();
+  public void spec106_mustConsiderSubscriptionCancelledAfterOnErrorOrOnCompleteHasBeenCalled() throws Throwable {
+    publisherVerification.spec106_mustConsiderSubscriptionCancelledAfterOnErrorOrOnCompleteHasBeenCalled();
   }
 
   @Test
@@ -231,6 +243,36 @@ public abstract class IdentityProcessorVerification<T> {
   }
 
   @Test
+  public void spec302_mustAllowSynchronousRequestCallsFromOnNextAndOnSubscribe() throws Throwable {
+    publisherVerification.spec302_mustAllowSynchronousRequestCallsFromOnNextAndOnSubscribe();
+  }
+
+  @Test
+  public void spec303_mustNotAllowUnboundedRecursion() throws Throwable {
+    publisherVerification.spec303_mustNotAllowUnboundedRecursion();
+  }
+
+  @Test
+  public void spec304_requestShouldNotPerformHeavyComputations() throws Exception {
+    publisherVerification.spec304_requestShouldNotPerformHeavyComputations();
+  }
+
+  @Test
+  public void spec305_cancelMustNotSynchronouslyPerformHeavyCompuatation() throws Exception {
+    publisherVerification.spec305_cancelMustNotSynchronouslyPerformHeavyCompuatation();
+  }
+
+  @Test
+  public void spec306_afterSubscriptionIsCancelledRequestMustBeNops() throws Throwable {
+    publisherVerification.spec306_afterSubscriptionIsCancelledRequestMustBeNops();
+  }
+
+  @Test
+  public void spec307_afterSubscriptionIsCancelledAdditionalCancelationsMustBeNops() throws Throwable {
+    publisherVerification.spec307_afterSubscriptionIsCancelledAdditionalCancelationsMustBeNops();
+  }
+
+  @Test
   public void spec313_cancelMustMakeThePublisherEventuallyDropAllReferencesToTheSubscriber() throws Throwable {
     publisherVerification.spec313_cancelMustMakeThePublisherEventuallyDropAllReferencesToTheSubscriber();
   }
@@ -240,9 +282,10 @@ public abstract class IdentityProcessorVerification<T> {
   @Test
   public void spec104_mustCallOnErrorOnAllItsSubscribersIfItEncountersANonRecoverableError() throws Exception {
     new TestSetup(env, processorBufferSize) {{
-      ManualSubscriberWithErrorCollection<T> sub1 = new ManualSubscriberWithErrorCollection<T>(env);
+      final ManualSubscriberWithErrorCollection<T> sub1 = new ManualSubscriberWithErrorCollection<T>(env);
       env.subscribe(processor, sub1);
-      ManualSubscriberWithErrorCollection<T> sub2 = new ManualSubscriberWithErrorCollection<T>(env);
+
+      final ManualSubscriberWithErrorCollection<T> sub2 = new ManualSubscriberWithErrorCollection<T>(env);
       env.subscribe(processor, sub2);
 
       sub1.request(1);
@@ -251,10 +294,10 @@ public abstract class IdentityProcessorVerification<T> {
       expectNextElement(sub1, x);
       sub1.request(1);
 
-      // sub1 now has received and element and has 1 pending
+      // sub1 has received one element, and has one demand pending
       // sub2 has not yet requested anything
 
-      Exception ex = new RuntimeException("Test exception");
+      final Exception ex = new RuntimeException("Test exception");
       sendError(ex);
       sub1.expectError(ex);
       sub2.expectError(ex);
@@ -269,7 +312,7 @@ public abstract class IdentityProcessorVerification<T> {
   // A Processor
   //   must obey all Subscriber rules on its consuming side
   public Subscriber<T> createSubscriber(final SubscriberVerification.SubscriberProbe<T> probe) {
-    Processor<T, T> processor = createIdentityProcessor(processorBufferSize);
+    final Processor<T, T> processor = createIdentityProcessor(processorBufferSize);
     processor.subscribe(
         new Subscriber<T>() {
           public void onSubscribe(final Subscription subscription) {
@@ -312,7 +355,7 @@ public abstract class IdentityProcessorVerification<T> {
   @Test
   public void mustCancelItsUpstreamSubscriptionIfItsLastDownstreamSubscriptionHasBeenCancelled() throws Exception {
     new TestSetup(env, processorBufferSize) {{
-      ManualSubscriber<T> sub = newSubscriber();
+      final ManualSubscriber<T> sub = newSubscriber();
       sub.cancel();
       expectCancelling();
 
@@ -325,38 +368,15 @@ public abstract class IdentityProcessorVerification<T> {
   @Test
   public void mustImmediatelyPassOnOnErrorEventsReceivedFromItsUpstreamToItsDownstream() throws Exception {
     new TestSetup(env, processorBufferSize) {{
-      ManualSubscriberWithErrorCollection<T> sub = new ManualSubscriberWithErrorCollection<T>(env);
+      final ManualSubscriberWithErrorCollection<T> sub = new ManualSubscriberWithErrorCollection<T>(env);
       env.subscribe(processor, sub);
 
-      Exception ex = new RuntimeException("Test exception");
+      final Exception ex = new RuntimeException("Test exception");
       sendError(ex);
       sub.expectError(ex); // "immediately", i.e. without a preceding request
 
       env.verifyNoAsyncErrors();
     }};
-  }
-
-  // A Processor
-  //   must be prepared to receive incoming elements from its upstream even if a downstream subscriber has not requested anything yet
-  @Test
-  public void mustBePreparedToReceiveIncomingElementsFromItsUpstreamEvenIfADownstreamSubscriberHasNotRequestedYet() throws Exception {
-    new TestSetup(env, processorBufferSize) {{
-        ManualSubscriber<T> sub = newSubscriber();
-        final T x = sendNextTFromUpstream();
-        sub.expectNone(50);
-        final T y = sendNextTFromUpstream();
-      sub.expectNone(50);
-
-        sub.request(2);
-        sub.expectNext(x);
-        sub.expectNext(y);
-
-        // to avoid error messages during test harness shutdown
-        sendCompletion();
-        sub.expectCompletion(env.defaultTimeoutMillis());
-
-        env.verifyNoAsyncErrors();
-      }};
   }
 
   /////////////////////// DELEGATED TESTS, A PROCESSOR "IS A" SUBSCRIBER //////////////////////
@@ -460,36 +480,6 @@ public abstract class IdentityProcessorVerification<T> {
   @Test
   public void spec301_mustNotBeCalledOutsideSubscriberContext() throws Exception {
     subscriberVerification.spec301_mustNotBeCalledOutsideSubscriberContext();
-  }
-
-  @Test
-  public void spec302_mustAllowSynchronousRequestCallsFromOnNextAndOnSubscribe() throws Throwable {
-    subscriberVerification.spec302_mustAllowSynchronousRequestCallsFromOnNextAndOnSubscribe();
-  }
-
-  @Test
-  public void spec303_mustNotAllowUnboundedRecursion() throws Exception {
-    subscriberVerification.spec303_mustNotAllowUnboundedRecursion();
-  }
-
-  @Test
-  public void spec304_requestShouldNotPerformHeavyComputations() throws Exception {
-    subscriberVerification.spec304_requestShouldNotPerformHeavyComputations();
-  }
-
-  @Test
-  public void spec305_mustNotSynchronouslyPerformHeavyCompuatation() throws Exception {
-    subscriberVerification.spec305_mustNotSynchronouslyPerformHeavyCompuatation();
-  }
-
-  @Test
-  public void spec306_afterSubscriptionIsCancelledRequestMustBeNops() throws Throwable {
-    subscriberVerification.spec306_afterSubscriptionIsCancelledRequestMustBeNops();
-  }
-
-  @Test
-  public void spec307_afterSubscriptionIsCancelledAdditionalCancelationsMustBeNops() throws Throwable {
-    subscriberVerification.spec307_afterSubscriptionIsCancelledAdditionalCancelationsMustBeNops();
   }
 
   @Test
