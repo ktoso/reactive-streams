@@ -83,6 +83,11 @@ public abstract class IdentityProcessorVerification<T> {
       public long maxElementsFromPublisher() {
         return IdentityProcessorVerification.this.maxElementsFromPublisher();
       }
+
+      @Override
+      public long boundedDepthOfOnNextAndRequestRecursion() {
+        return IdentityProcessorVerification.this.boundedDepthOfOnNextAndRequestRecursion();
+      }
     };
   }
 
@@ -122,6 +127,18 @@ public abstract class IdentityProcessorVerification<T> {
    */
   public long maxElementsFromPublisher() {
     return Long.MAX_VALUE;
+  }
+
+  /**
+     * In order to verify rule 3.3 of the reactive streams spec, this number will be used to check if a
+     * {@code Subscription} actually solves the "unbounded recursion" problem by not allowing the number of
+     * recursive calls to exceed the number returned by this method.
+     *
+     * @see <a href="https://github.com/reactive-streams/reactive-streams#3.3">reactive streams spec, rule 3.3</a>
+     * @see PublisherVerification#spec303_mustNotAllowUnboundedRecursion()
+     */
+  public long boundedDepthOfOnNextAndRequestRecursion() {
+    return 1;
   }
 
   ////////////////////// TEST ENV CLEANUP /////////////////////////////////////
