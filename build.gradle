@@ -4,7 +4,8 @@ allprojects {
     apply plugin: 'eclipse'
     apply plugin: 'idea'
     apply plugin: 'ivy-publish'
-    
+    apply plugin: 'maven-publish'
+
 
     group = 'org.reactivestreams'
     version = '1.0.0.M1'
@@ -75,6 +76,7 @@ allprojects {
     
     publishing {
         repositories {
+
             ivy {
                 url "${System.properties['user.home']}/.ivy2/local"
 
@@ -84,8 +86,16 @@ allprojects {
                     artifact '[organisation]/[module]/[revision]/[type]s/[module](-[classifier]).[ext]'
                 }
             }
+
+            maven {
+                url "${System.properties['user.home']}/.m2/repository"
+            }
         }
         publications {
+            mavenJava(MavenPublication) {
+                from components.java
+            }
+
             ivy(IvyPublication) {
                 from components.java
                 descriptor.withXml {
