@@ -261,24 +261,30 @@ public abstract class PublisherVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#1.4
   @Additional(implement = "createErrorStatePublisher") @Test
   public void spec104_mustSignalOnErrorWhenFails() throws Throwable {
-    errorPublisherTest(new PublisherTestRun<T>() {
-      @Override
-      public void run(final Publisher<T> pub) throws InterruptedException {
-        final Latch latch = new Latch(env);
-        pub.subscribe(new TestEnvironment.TestSubscriber<T>(env) {
-          @Override
-          public void onError(Throwable cause) {
-            latch.assertOpen(String.format("Error-state Publisher %s called `onError` twice on new Subscriber", pub));
-            latch.close();
-          }
-        });
+    try {
+      errorPublisherTest(new PublisherTestRun<T>() {
+        @Override
+        public void run(final Publisher<T> pub) throws InterruptedException {
+          final Latch latch = new Latch(env);
+          pub.subscribe(new TestEnvironment.TestSubscriber<T>(env) {
+            @Override
+            public void onError(Throwable cause) {
+              latch.assertOpen(String.format("Error-state Publisher %s called `onError` twice on new Subscriber", pub));
+              latch.close();
+            }
+          });
 
-        latch.expectClose(String.format("Error-state Publisher %s did not call `onError` on new Subscriber", pub));
-        Thread.sleep(env.defaultTimeoutMillis()); // wait for the Publisher to potentially call 'onSubscribe' or `onNext` which would trigger an async error
+          latch.expectClose(String.format("Error-state Publisher %s did not call `onError` on new Subscriber", pub));
+          Thread.sleep(env.defaultTimeoutMillis()); // wait for the Publisher to potentially call 'onSubscribe' or `onNext` which would trigger an async error
 
-        env.verifyNoAsyncErrors();
-      }
-    });
+          env.verifyNoAsyncErrors();
+        }
+      });
+    } catch (Throwable ex) {
+      // we also want to catch AssertionErrors and anything the publisher may have thrown inside subscribe
+      // which was wrong of him - he should have signalled on error using onError
+      throw new RuntimeException("Publisher threw exception ("+ex+") instead of signalling error via onError!", ex);
+    }
   }
 
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#1.5
@@ -540,6 +546,9 @@ public abstract class PublisherVerification<T> {
             if (callsUntilNow > boundedDepthOfOnNextAndRequestRecursion()) {
               env.flop(String.format("Got %d onNext calls within thread: %s, yet expected recursive bound was %d",
                                      callsUntilNow, Thread.currentThread(), boundedDepthOfOnNextAndRequestRecursion()));
+
+              // stop the recurrsive call chain
+              return;
             }
 
             // request more right away, the Publisher must break the recursion
@@ -685,10 +694,11 @@ public abstract class PublisherVerification<T> {
             onNextsSignalled += 1;
             stillBeingSignalled = true;
           }
-        } while (stillBeingSignalled && onNextsSignalled < totalDemand);
 
-        assertTrue(onNextsSignalled <= totalDemand,
-                   String.format("Publisher signalled [%d] elements, which is more than the signalled demand: %d", onNextsSignalled, totalDemand));
+          assertTrue(onNextsSignalled <= totalDemand,
+                     String.format("Publisher signalled [%d] elements, which is more than the signalled demand: %d", onNextsSignalled, totalDemand));
+
+        } while (stillBeingSignalled);
       }
     });
 
@@ -774,37 +784,31 @@ public abstract class PublisherVerification<T> {
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.17
   @Required @Test
   public void spec317_mustSignalOnErrorWhenPendingAboveLongMaxValue() throws Throwable {
-    final long MAX_SPINS = 10;
-    final long SPIN_ASSERT_DELAY = env.defaultTimeoutMillis() / MAX_SPINS;
-
     activePublisherTest(Integer.MAX_VALUE, new PublisherTestRun<T>() {
       @Override public void run(Publisher<T> pub) throws Throwable {
-        final ManualSubscriber<T> sub = env.newBlackholeSubscriber(pub);
-
-        sub.request(Long.MAX_VALUE - 1);
-
-        long i = 0;
-        boolean overflowSignalled = false;
-        while (!overflowSignalled && i < MAX_SPINS) {
-          sub.request(Long.MAX_VALUE - 1);
-
-          Thread.sleep(SPIN_ASSERT_DELAY);
-          Throwable asyncError = env.dropAsyncError();
-
-          //noinspection StatementWithEmptyBody
-          if (asyncError == null) {
-            // did not get onError yet, keep spinning
-          } else {
-            // verify it's the kind of onError we are expecting here
-            env.assertErrorWithMessage(asyncError, IllegalStateException.class, "3.17");
-            overflowSignalled = true;
+        ManualSubscriberWithSubscriptionSupport<T> sub = new BlackholeSubscriberWithSubscriptionSupport<T>(env) {
+          int maxCalls = 10;
+          @Override
+          public void onNext(T element) {
+            env.debug(this + "::onNext(" + element + ")");
+            if (subscription.isCompleted()) {
+              if (maxCalls > 0) {
+                subscription.value().request(Long.MAX_VALUE - 1);
+                maxCalls--;
+              }
+            } else {
+              env.flop("Subscriber::onNext(" + element + ") called before Subscriber::onSubscribe");
+            }
           }
+        };
+        env.subscribe(pub, sub, env.defaultTimeoutMillis());
 
-          i++;
-        }
+        // try triggering multiple onNexts right away
+        sub.request(1);
+        sub.request(1);
+        sub.request(1);
 
-        env.debug(String.format("Signalled overflow after %d-th spin (of max: %d), with %dms delays: %s (`true` is expected)", i + 1, MAX_SPINS, SPIN_ASSERT_DELAY, overflowSignalled));
-        assertTrue(overflowSignalled, String.format("Expected overflow to be signalled after %d spins (max: %d), with delays: %d", i + 1, MAX_SPINS, SPIN_ASSERT_DELAY));
+        sub.expectErrorWithMessage(IllegalStateException.class, "3.17");
 
         // onError must be signalled only once, even with in-flight other request() messages that would trigger overflow again
         env.verifyNoAsyncErrors(env.defaultTimeoutMillis());
@@ -849,7 +853,7 @@ public abstract class PublisherVerification<T> {
     } catch (Exception ex) {
       notVerified(skipMessage);
     } catch (AssertionError ex) {
-      notVerified(skipMessage);
+      notVerified(skipMessage + " Reason for skipping was: " + ex.getMessage());
     }
   }
 

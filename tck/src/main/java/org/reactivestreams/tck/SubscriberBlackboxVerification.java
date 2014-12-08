@@ -98,7 +98,8 @@ public abstract class SubscriberBlackboxVerification<T> {
             final Throwable thr = new Throwable();
             for (StackTraceElement stackElem : thr.getStackTrace()) {
               if (stackElem.getMethodName().equals("onComplete")) {
-                env.flop("Subscription::request MUST NOT be called from onComplete!");
+                env.flop(String.format("Subscription::request MUST NOT be called from Subscriber::onComplete! (Caller: %s::%s line %d)",
+                                                       stackElem.getClassName(), stackElem.getMethodName(), stackElem.getLineNumber()));
               }
             }
           }
@@ -108,7 +109,8 @@ public abstract class SubscriberBlackboxVerification<T> {
             final Throwable thr = new Throwable();
             for (StackTraceElement stackElem : thr.getStackTrace()) {
               if (stackElem.getMethodName().equals("onComplete")) {
-                env.flop("Subscriber::onComplete MUST NOT call Subscription::cancel");
+                env.flop(String.format("Subscription::cancel MUST NOT be called from Subscriber::onComplete! (Caller: %s::%s line %d)",
+                                                       stackElem.getClassName(), stackElem.getMethodName(), stackElem.getLineNumber()));
               }
             }
           }
@@ -135,7 +137,7 @@ public abstract class SubscriberBlackboxVerification<T> {
             final Throwable thr = new Throwable();
             for (StackTraceElement stackElem : thr.getStackTrace()) {
               if (stackElem.getMethodName().equals("onError")) {
-                env.flop(String.format("Subscriber::onError MUST NOT call Subscription::request! (Caller: %s::%s line %d)",
+                env.flop(String.format("Subscription::request MUST NOT be called from Subscriber::onError! (Caller: %s::%s line %d)",
                                        stackElem.getClassName(), stackElem.getMethodName(), stackElem.getLineNumber()));
               }
             }
@@ -146,7 +148,7 @@ public abstract class SubscriberBlackboxVerification<T> {
             final Throwable thr = new Throwable();
             for (StackTraceElement stackElem : thr.getStackTrace()) {
               if (stackElem.getMethodName().equals("onError")) {
-                env.flop(String.format("Subscriber::onError MUST NOT call Subscription::cancel! (Caller: %s::%s line %d)",
+                env.flop(String.format("Subscription::cancel MUST NOT be called from Subscriber::onError! (Caller: %s::%s line %d)",
                                        stackElem.getClassName(), stackElem.getMethodName(), stackElem.getLineNumber()));
               }
             }
@@ -267,7 +269,7 @@ public abstract class SubscriberBlackboxVerification<T> {
       @Override
       @SuppressWarnings("ThrowableResultOfMethodCallIgnored")
       public void run(BlackboxTestStage stage) throws Throwable {
-        stage.sub().onError(new Throwable("Boom!"));
+        stage.sub().onError(new Throwable("Test Exception: Boom!"));
         stage.subProxy().expectError(Throwable.class);
       }
     });

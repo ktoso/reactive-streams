@@ -127,13 +127,16 @@ public abstract class IdentityProcessorVerification<T> {
   public abstract Publisher<T> createErrorStatePublisher();
 
   /**
-   * Override and return lower value if your Publisher is only able to produce a finite number of elements.
+   * Override and return lower value if your Publisher is only able to produce a known number of elements.
    * For example, if it is designed to return at-most-one element, return {@code 1} from this method.
    *
-   * Defaults to {@code Long.MAX_VALUE}, meaning that the Publisher can be produce up to infinite streams.
+   * Defaults to {@code Long.MAX_VALUE - 1}, meaning that the Publisher can be produce a huge, but NOT an infinite, number of elements.
+   *
+   * To mark your Publisher will *never* signal an {@code onComplete} override this method and return {@code Long.MAX_VALUE},
+   * which will result in *skipping all tests which require an onComplete to be triggered* (!).
    */
   public long maxElementsFromPublisher() {
-    return Long.MAX_VALUE;
+    return Long.MAX_VALUE - 1;
   }
 
   /**
