@@ -677,9 +677,9 @@ public abstract class PublisherVerification<T> {
         sub.request(demand2);
         final int totalDemand = demand1 + demand2;
 
+        sub.nextElement();
         sub.cancel();
 
-        sub.nextElement();
         int onNextsSignalled = 1;
 
         boolean stillBeingSignalled;
