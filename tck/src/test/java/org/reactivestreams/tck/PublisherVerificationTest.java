@@ -55,9 +55,10 @@ public class PublisherVerificationTest extends TCKVerificationSupport {
   @Test
   public void spec103_mustSignalOnMethodsSequentially_shouldFailBy_concurrentlyAccessingOnNext() throws Throwable {
     final AtomicInteger startedSignallingThreads = new AtomicInteger(0);
+    // this is an arbitrary number, we jsut need "many threads" to try to force an concurrent access scenario
     final int maxSignallingThreads = 10;
 
-    final ExecutorService signallersPool = Executors.newFixedThreadPool(10);
+    final ExecutorService signallersPool = Executors.newFixedThreadPool(maxSignallingThreads);
     final AtomicBoolean concurrentAccessCaused = new AtomicBoolean(false);
 
 
@@ -83,7 +84,7 @@ public class PublisherVerificationTest extends TCKVerificationSupport {
                     signallersPool.shutdownNow();
 
                     if (ex.getMessage().contains("Expected latch to be open")) {
-                      if (concurrentAccessCaused.compareAndSet(false, true)) {
+                      if (!concurrentAccessCaused.getAndSet(true)) {
                         throw new RuntimeException("Concurrent access detected", ex);
                       } else {
                         // error signalled once already, stop more errors from propagating
@@ -102,7 +103,7 @@ public class PublisherVerificationTest extends TCKVerificationSupport {
               try {
                 signallersPool.submit(signalling);
               } catch (RejectedExecutionException ex) {
-                // ignore
+                // ignore, should be safe as it means the pool is shutting down -> which means we triggered the problem we wanted to
                 return;
               }
             }
@@ -115,11 +116,16 @@ public class PublisherVerificationTest extends TCKVerificationSupport {
       }
     };
 
-    requireTestFailure(new ThrowingRunnable() {
-      @Override public void run() throws Throwable {
-        customPublisherVerification(concurrentAccessPublisher).spec103_mustSignalOnMethodsSequentially();
-      }
-    }, "Expected latch to be open during onNext call"); // TODO error message could be better, to show that the concurrent signalling is the problem
+    try {
+      requireTestFailure(new ThrowingRunnable() {
+        @Override public void run() throws Throwable {
+          customPublisherVerification(concurrentAccessPublisher).spec103_mustSignalOnMethodsSequentially();
+        }
+      }, "Expected latch to be open during onNext call"); // TODO error message could be better, to show that the concurrent signalling is the problem
+    } finally {
+      signallersPool.shutdownNow();
+      signallersPool.awaitTermination(1, TimeUnit.SECONDS);
+    }
   }
 
   @Test
