@@ -343,6 +343,59 @@ public abstract class SubscriberWhiteboxVerification<T> extends WithHelperPublis
     notVerified(); // cannot be meaningfully tested, or can it?
   }
 
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.13
+  @Override @Test
+  public void required_spec213_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+    subscriberTest(new TestStageTestRun() {
+      @Override
+      public void run(WhiteboxTestStage stage) throws Throwable {
+
+        final Subscription subscription = new Subscription() {
+          @Override public void request(final long elements) {}
+          @Override public void cancel() {}
+        };
+
+        {
+          final Subscriber<T> sub = createSubscriber(stage.probe());
+          boolean gotNPE = false;
+          try {
+            sub.onSubscribe(null);
+          } catch(final NullPointerException expected) {
+            gotNPE = true;
+          }
+          assertTrue(gotNPE, "onSubscribe(null) did not throw NullPointerException");
+        }
+
+        {
+          final Subscriber<T> sub = createSubscriber(stage.probe());
+          boolean gotNPE = false;
+          sub.onSubscribe(subscription);
+          try {
+            sub.onNext(null);
+          } catch(final NullPointerException expected) {
+            gotNPE = true;
+          }
+          assertTrue(gotNPE, "onNext(null) did not throw NullPointerException");
+        }
+
+        {
+          final Subscriber<T> sub = createSubscriber(stage.probe());
+          boolean gotNPE = false;
+          sub.onSubscribe(subscription);
+          try {
+            sub.onError(null);
+          } catch(final NullPointerException expected) {
+            gotNPE = true;
+          }
+          assertTrue(gotNPE, "onError(null) did not throw NullPointerException");
+        }
+
+        env.verifyNoAsyncErrors();
+      }
+    });
+  }
+
+
   ////////////////////// SUBSCRIPTION SPEC RULE VERIFICATION //////////////////
 
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#3.1

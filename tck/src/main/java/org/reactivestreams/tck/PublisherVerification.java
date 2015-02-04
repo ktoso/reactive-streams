@@ -432,10 +432,24 @@ public abstract class PublisherVerification<T> implements PublisherVerificationR
     notVerified(); // can we meaningfully test this?
   }
 
-  // Verifies rule: https://github.com/reactive-streams/reactive-streams#1.9
   @Override @Test
   public void untested_spec109_subscribeShouldNotThrowNonFatalThrowable() throws Throwable {
-    notVerified(); // cannot be meaningfully tested, or can it?
+    notVerified(); // can we meaningfully test this?
+  }
+
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#1.9
+  @Override @Test
+  public void required_spec109_subscribeThrowNPEOnNullSubscriber() throws Throwable {
+    optionalActivePublisherTest(1, true, new PublisherTestRun<T>() {
+      @Override
+      public void run(Publisher<T> pub) throws Throwable {
+         try {
+           pub.subscribe(null);
+           env.flop(String.format("Publisher (%s) did not throw a NullPointerException when given a null Subscribe in subscribe", pub));
+         } catch (NullPointerException npe) { }
+         env.verifyNoAsyncErrors();
+      }
+    });
   }
 
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#1.10

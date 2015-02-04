@@ -14,10 +14,14 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import java.lang.NullPointerException;
+import java.lang.Override;
+import java.lang.RuntimeException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static org.reactivestreams.tck.SubscriberWhiteboxVerification.BlackboxSubscriberProxy;
+import static org.testng.Assert.assertTrue;
 
 /**
  * Provides tests for verifying {@link org.reactivestreams.Subscriber} and {@link org.reactivestreams.Subscription}
@@ -308,6 +312,57 @@ public abstract class SubscriberBlackboxVerification<T> extends WithHelperPublis
   @Override @Test
   public void untested_spec213_blackbox_failingOnSignalInvocation() throws Exception {
     notVerified(); // cannot be meaningfully tested, or can it?
+  }
+
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.13
+  @Override @Test
+  public void required_spec213_blackbox_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+    blackboxSubscriberWithoutSetupTest(new BlackboxTestStageTestRun() {
+      @Override
+      public void run(BlackboxTestStage stage) throws Throwable {
+        final Subscription subscription = new Subscription() {
+          @Override public void request(final long elements) {}
+          @Override public void cancel() {}
+        };
+
+        {
+          final Subscriber<T> sub = createSubscriber();
+          boolean gotNPE = false;
+          try {
+            sub.onSubscribe(null);
+          } catch(final NullPointerException expected) {
+            gotNPE = true;
+          }
+          assertTrue(gotNPE, "onSubscribe(null) did not throw NullPointerException");
+        }
+
+        {
+          final Subscriber<T> sub = createSubscriber();
+          boolean gotNPE = false;
+          sub.onSubscribe(subscription);
+          try {
+            sub.onNext(null);
+          } catch(final NullPointerException expected) {
+            gotNPE = true;
+          }
+          assertTrue(gotNPE, "onNext(null) did not throw NullPointerException");
+        }
+
+        {
+          final Subscriber<T> sub = createSubscriber();
+          boolean gotNPE = false;
+          sub.onSubscribe(subscription);
+          try {
+            sub.onError(null);
+          } catch(final NullPointerException expected) {
+            gotNPE = true;
+          }
+          assertTrue(gotNPE, "onError(null) did not throw NullPointerException");
+        }
+
+        env.verifyNoAsyncErrors();
+      }
+    });
   }
 
   ////////////////////// SUBSCRIPTION SPEC RULE VERIFICATION //////////////////
