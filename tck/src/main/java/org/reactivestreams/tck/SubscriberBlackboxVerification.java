@@ -14,9 +14,6 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import java.lang.NullPointerException;
-import java.lang.Override;
-import java.lang.RuntimeException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -316,14 +313,10 @@ public abstract class SubscriberBlackboxVerification<T> extends WithHelperPublis
 
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.13
   @Override @Test
-  public void required_spec213_blackbox_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+  public void required_spec213_blackbox_onSubscribe_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
     blackboxSubscriberWithoutSetupTest(new BlackboxTestStageTestRun() {
       @Override
       public void run(BlackboxTestStage stage) throws Throwable {
-        final Subscription subscription = new Subscription() {
-          @Override public void request(final long elements) {}
-          @Override public void cancel() {}
-        };
 
         {
           final Subscriber<T> sub = createSubscriber();
@@ -336,6 +329,22 @@ public abstract class SubscriberBlackboxVerification<T> extends WithHelperPublis
           assertTrue(gotNPE, "onSubscribe(null) did not throw NullPointerException");
         }
 
+        env.verifyNoAsyncErrors();
+      }
+    });
+  }
+  
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.13
+  @Override @Test
+  public void required_spec213_blackbox_onNext_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+    blackboxSubscriberWithoutSetupTest(new BlackboxTestStageTestRun() {
+      @Override
+      public void run(BlackboxTestStage stage) throws Throwable {
+        final Subscription subscription = new Subscription() {
+          @Override public void request(final long elements) {}
+          @Override public void cancel() {}
+        };
+
         {
           final Subscriber<T> sub = createSubscriber();
           boolean gotNPE = false;
@@ -347,6 +356,22 @@ public abstract class SubscriberBlackboxVerification<T> extends WithHelperPublis
           }
           assertTrue(gotNPE, "onNext(null) did not throw NullPointerException");
         }
+
+        env.verifyNoAsyncErrors();
+      }
+    });
+  }
+  
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.13
+  @Override @Test
+  public void required_spec213_blackbox_onError_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+    blackboxSubscriberWithoutSetupTest(new BlackboxTestStageTestRun() {
+      @Override
+      public void run(BlackboxTestStage stage) throws Throwable {
+        final Subscription subscription = new Subscription() {
+          @Override public void request(final long elements) {}
+          @Override public void cancel() {}
+        };
 
         {
           final Subscriber<T> sub = createSubscriber();

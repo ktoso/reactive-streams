@@ -4,10 +4,9 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import org.reactivestreams.tck.TestEnvironment.*;
-import org.reactivestreams.tck.support.Function;
 import org.reactivestreams.tck.support.Optional;
-import org.reactivestreams.tck.support.TestException;
 import org.reactivestreams.tck.support.SubscriberWhiteboxVerificationRules;
+import org.reactivestreams.tck.support.TestException;
 import org.testng.SkipException;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -17,7 +16,6 @@ import org.testng.annotations.Test;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 
 /**
@@ -345,15 +343,10 @@ public abstract class SubscriberWhiteboxVerification<T> extends WithHelperPublis
 
   // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.13
   @Override @Test
-  public void required_spec213_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+  public void required_spec213_onSubscribe_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
     subscriberTest(new TestStageTestRun() {
       @Override
       public void run(WhiteboxTestStage stage) throws Throwable {
-
-        final Subscription subscription = new Subscription() {
-          @Override public void request(final long elements) {}
-          @Override public void cancel() {}
-        };
 
         {
           final Subscriber<T> sub = createSubscriber(stage.probe());
@@ -366,6 +359,21 @@ public abstract class SubscriberWhiteboxVerification<T> extends WithHelperPublis
           assertTrue(gotNPE, "onSubscribe(null) did not throw NullPointerException");
         }
 
+        env.verifyNoAsyncErrors();
+      }
+    });
+  }// Verifies rule: https://github.com/reactive-streams/reactive-streams#2.13
+  @Override @Test
+  public void required_spec213_onNext_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+    subscriberTest(new TestStageTestRun() {
+      @Override
+      public void run(WhiteboxTestStage stage) throws Throwable {
+
+        final Subscription subscription = new Subscription() {
+          @Override public void request(final long elements) {}
+          @Override public void cancel() {}
+        };
+
         {
           final Subscriber<T> sub = createSubscriber(stage.probe());
           boolean gotNPE = false;
@@ -377,6 +385,23 @@ public abstract class SubscriberWhiteboxVerification<T> extends WithHelperPublis
           }
           assertTrue(gotNPE, "onNext(null) did not throw NullPointerException");
         }
+
+        env.verifyNoAsyncErrors();
+      }
+    });
+  }
+  
+  // Verifies rule: https://github.com/reactive-streams/reactive-streams#2.13
+  @Override @Test
+  public void required_spec213_onError_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+    subscriberTest(new TestStageTestRun() {
+      @Override
+      public void run(WhiteboxTestStage stage) throws Throwable {
+
+        final Subscription subscription = new Subscription() {
+          @Override public void request(final long elements) {}
+          @Override public void cancel() {}
+        };
 
         {
           final Subscriber<T> sub = createSubscriber(stage.probe());

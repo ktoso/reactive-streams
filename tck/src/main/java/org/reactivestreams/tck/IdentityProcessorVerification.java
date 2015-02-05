@@ -564,8 +564,16 @@ public abstract class IdentityProcessorVerification<T> extends WithHelperPublish
   }
 
   @Override @Test
-  public void required_spec213_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
-    subscriberVerification.required_spec213_mustThrowNullPointerExceptionWhenParametersAreNull();
+  public void required_spec213_onSubscribe_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+    subscriberVerification.required_spec213_onSubscribe_mustThrowNullPointerExceptionWhenParametersAreNull();
+  }
+  @Override @Test
+  public void required_spec213_onNext_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+    subscriberVerification.required_spec213_onNext_mustThrowNullPointerExceptionWhenParametersAreNull();
+  }
+  @Override @Test
+  public void required_spec213_onError_mustThrowNullPointerExceptionWhenParametersAreNull() throws Throwable {
+    subscriberVerification.required_spec213_onError_mustThrowNullPointerExceptionWhenParametersAreNull();
   }
 
   @Override @Test
